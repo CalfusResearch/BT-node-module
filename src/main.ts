@@ -91,15 +91,11 @@ export class WebAuditorService {
   // }
 
   async bulidSummaryCallback(url: string, parentId: string, numberCount: string,  callBack? :()=>void |undefined, processJson: boolean = true) {
-  
+    let accessibilityScore = 100
     const directoryName = `src/scans`
     if (!fs.existsSync(directoryName)) {
       fs.mkdirSync(directoryName, { recursive: true });
     }
-
-    console.log('====buidlJSON====')
-    console.log(processJson)
-    console.log('====buidlJSON====')
 
     let jsonFilePath = `${directoryName}/${parentId}-${numberCount}.json`; 
     let htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
@@ -116,11 +112,23 @@ export class WebAuditorService {
 
         jsonFilePath = jsonFilePath.replace('.json','.report.json')
         htmlFilePath = htmlFilePath.replace('.html','.report.html')
+
+        const fileContent = await fs.promises.readFile(jsonFilePath, 'utf-8'); 
+        const parsedReport = JSON.parse(fileContent);
+        accessibilityScore = parsedReport.categories.accessibility.score * 100;  
         
+        console.log('====came here===========')
+
         if(processJson){
+          console.log('-------------------------')
+          console.log(accessibilityScore)
+          console.log('-------------------------')
+
           this.importJsonReport(jsonFilePath, htmlFilePath, callBack) 
         }
       })
+
+      return accessibilityScore
   }
 
 
@@ -149,7 +157,7 @@ export class WebAuditorService {
     
       this.logger.log('Updating Results .. ')
       const processedData: any = JSON.stringify(this.formatJson(JSON.parse(data), htmlFilePath ));
-  
+      jsonFilePath = jsonFilePath.replace('.report.json','.json')
       fs.writeFile(jsonFilePath, processedData, (err) => {
           if (err) {
               this.logger.error('Error writing the file:', err);
