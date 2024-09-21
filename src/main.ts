@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { URL } from 'url';
 import { promisify } from 'util';
 import { v4 as uuidv4 } from 'uuid';
+import { Groups, GuideLine, Item, Status } from './types';
 
 const visited = new Set();
 const allUrls = new Set();
@@ -74,9 +75,8 @@ export class WebAuditorService {
       }
   
       const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
-      const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.report.html`;
   
-      const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
+      const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath} --chrome-flags="--headless" --timeout=60000`;
       this.logger.log('Running Lighthouse audit in headless mode...');
   
       try {
@@ -97,22 +97,19 @@ export class WebAuditorService {
       fs.mkdirSync(directoryName, { recursive: true });
     }
 
-    const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
+    const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.json`; 
 
-    const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
+    const command = `lighthouse ${url} --output=json --output-path=${jsonFilePath} --chrome-flags="--headless" --timeout=60000`;
 
     this.logger.log('Running Lighthouse audit in headless mode...');
     exec(command, async (error, stdout, stderr) => {
-              if (error) {
-                  this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
-                  this.logger.error(`Error running Lighthouse audit: ${error.message}`);
-                  return;
-              }
-              this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
-              if(callBack) {
-                this.logger.log('calling callback')
-                callBack()
-            }
+        if (error) {
+            this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
+            this.logger.error(`Error running Lighthouse audit: ${error.message}`);
+            return;
+        }
+        this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
+        this.importJsonReport(jsonFilePath, callBack) 
       })
   }
 
@@ -133,29 +130,73 @@ export class WebAuditorService {
       });
   }
 
-  importJsonReport(jsonFilePath: string) {
+  importJsonReport(jsonFilePath: string, callBack? :()=>void |undefined) {
     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
       if (err) {
-        this.logger.error(`Error reading JSON report: ${err.message}`);
-        return;
+          this.logger.error('Error reading the file:', err);
+          return;
       }
-      try {
-        const json = JSON.parse(data);
-        this.logger.log('Lighthouse JSON report data:', json);
-        // this.processAuditResults(json);
-      } catch (parseError: any) {
-        this.logger.error(`Error parsing JSON report: ${parseError.message}`);
-      } finally {
-        // fs.unlink(jsonFilePath, (deleteErr) => {
-        //   if (deleteErr) {
-        //     this.logger.error(`Error deleting JSON file: ${deleteErr.message}`);
-        //   } else {
-        //     this.logger.log(`JSON report file ${jsonFilePath} deleted successfully.`);
-        //   }
-        // });
-      }
+    
+      this.logger.log('Updating Results .. ')
+      const processedData: any = JSON.stringify(this.formatJson(JSON.parse(data)));
+  
+      fs.writeFile(jsonFilePath, processedData, (err) => {
+          if (err) {
+              this.logger.error('Error writing the file:', err);
+              return;
+          }
+          this.logger.log('Processed content saved successfully to', jsonFilePath);
+          if(callBack) {
+            this.logger.log('Calling callback ...')
+            callBack()
+        }
+      });
     });
   }
+
+
+  formatJson(json:any) {
+    const groups = new Map<string, Groups>()
+    json?.categories?.accessibility.auditRefs?.forEach(it => {
+        const grp : Groups = {
+          title: json?.categoryGroups[it.group]?.title ?? 'default',
+          description: json?.categoryGroups[it.group]?.description ?? "default",
+          guidLine: []
+        }
+        groups.set(it.group ?? 'default', grp)
+    });
+
+    json?.categories?.accessibility.auditRefs?.forEach(it => {
+      const grp = groups.get(it.group ?? 'default') 
+      if(grp) {
+        const status = json?.audits[it.id]?.details?.headings[0]?.label == 'Failing Elements' ? Status.Fail : Status.Pass;
+        const guildeLine: GuideLine = {
+            description:  json?.audits[it.id]?.description || "",
+            score: json?.audits[it.id]?.score || 0,
+            status: status,
+            type: it.id,
+            title: json?.audits[it.id]?.description ||  "",
+            weight: json?.audits[it.id]?.weight || 0,
+            item: []
+        }
+        if(status === Status.Fail) {
+            json?.audits[it.id]?.details?.items?.forEach(itm=> {
+              const item : Item = {
+                explanation: itm?.node?.explanation,
+                snippet: itm?.node?.snippet,
+              }
+              guildeLine.item.push(item)
+            })
+        }
+        grp.guidLine.push(guildeLine)
+        groups.set(it.group ?? 'default', grp)
+      }
+    });
+    const accessabilty: Groups[] = []
+    groups.forEach(it=> accessabilty.push(it))
+    return accessabilty
+  }
+
 
   processAuditResults(json: any) {
     const aiReq: AccessibilityIssue[] = []; 
