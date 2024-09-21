@@ -11,7 +11,7 @@ const delay = promisify(setTimeout);
 describe('WebAuditorService', () => {
   let service: WebAuditorService;
 
-  const outputDir = 'src/scans';
+  const outputDir = 'src/main/';
   const ensureDirectoryExists = (dir: string) => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -48,7 +48,7 @@ describe('WebAuditorService', () => {
   it('should generate a Lighthouse report and ensure accessibility score is >= 75', async () => {
     const url = process.env.TEST_URL || 'https://github.com/';
     
-    const parentUuid = await WebAuditorService.makeScann(url);
+    const parentUuid = await service.makeScann(url);
     const filePath = path.join(outputDir, `${parentUuid}-1.report.report.html`);
     
     const isFileCreated = await checkFileCreated(filePath, 600000);

@@ -1,17 +1,17 @@
-import { Logger } from '@nestjs/common';
-import { root } from 'cheerio/dist/commonjs/static';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
-const { exec } = require('child_process');
 import OpenAI from 'openai';
+import { exec } from 'child_process';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import { URL } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-const axios = require('axios');
-const cheerio = require('cheerio');
-const { URL } = require('url');
+import util from 'util';
+import { promisify } from 'util';
+
 const visited = new Set();
 const allUrls = new Set();
-
-const util = require('util');
-const execPromise = util.promisify(exec);
+const execPromise = promisify(exec);
 
 
 interface AccessibilityIssue {
@@ -21,13 +21,13 @@ interface AccessibilityIssue {
     explanation: string;
   }
   
-
+@Injectable()   
 export class WebAuditorService {
   private logger: Logger = new Logger(WebAuditorService.name);
 
   constructor() {}
-  
-  static async makeScann(url: string, maxDepth: Number = 1) {
+
+  async makeScann(url: string, maxDepth: Number = 1) {
     const queue = [{ url: url, depth: 0 }];
     let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
 
@@ -37,14 +37,16 @@ export class WebAuditorService {
     return { message: parentId };
   }
 
-  static async generateReportsForAllUrls(allUrls: any, parentId: string) {
-    let resolvedUrls = await allUrls
-    const concurrencyLimit = 5; 
+  async generateReportsForAllUrls(allUrls: any, parentId: string): Promise<{url: any, index: number}[]> {
+    let resolvedUrls = await allUrls;
+    const concurrencyLimit = 5;
     const urlsArray = Array.from(resolvedUrls);
-    const queue = []; 
+    const queue: Promise<void>[] = [];
+    const results: {url: any, index: number}[] = [];  
   
-    const processBatch = async (url: any, index: number) => {
+    const processBatch = async (url: any, index: any) => {
       await this.buildSummary(url, parentId, String(index + 1));
+      results.push({ url, index });  
     };
   
     for (let index = 0; index < urlsArray.length; index++) {
@@ -53,34 +55,29 @@ export class WebAuditorService {
       const task = processBatch(eachUrl, index);
       queue.push(task);
   
-      if (queue.length >= concurrencyLimit) {
-        await Promise.race(queue); 
-        queue.splice(queue.indexOf(await Promise.race(queue)), 1);
+      if (queue.length >= concurrencyLimit) { 
+        await Promise.race(queue);
+        queue.splice(queue.findIndex(async p => await p === await Promise.race(queue)), 1);
       }
     }
-  
+    
     await Promise.all(queue);
-  }
-
   
-  static async buildSummary(url: string, parentId: string, numberCount: string) {
+    return results; 
+  }
+  
+  async buildSummary(url: string, parentId: string, numberCount: string) {
   
       const directoryName = `src/scans`
       if (!fs.existsSync(directoryName)) {
-        try {
-          fs.mkdirSync(directoryName, { recursive: true });
-          console.log(`Directory created successfully: ${directoryName}`);
-        } catch (error) {
-          console.error(`Error creating directory: ${error.message}`);
-        }
-      } else {
-        console.log(`Directory already exists: ${directoryName}`);
+        fs.mkdirSync(directoryName, { recursive: true });
       }
   
       const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
       const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.report.html`;
   
       const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
+      this.logger.log('Running Lighthouse audit in headless mode...');
   
       try {
           await execPromise(command);
@@ -88,9 +85,11 @@ export class WebAuditorService {
           // await this.checkFileExists(jsonFilePath);
           // await this.checkFileExists(htmlFilePath);
   
+          this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
           
           this.importJsonReport(jsonFilePath);
-      } catch (error) {
+      } catch (error: any) {
+          this.logger.error(`Error running Lighthouse audit: ${error.message}`);
       }
   }
   
@@ -110,15 +109,18 @@ export class WebAuditorService {
       });
   }
 
-  static importJsonReport(jsonFilePath: string) {
+  importJsonReport(jsonFilePath: string) {
     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
       if (err) {
+        this.logger.error(`Error reading JSON report: ${err.message}`);
         return;
       }
       try {
         const json = JSON.parse(data);
+        this.logger.log('Lighthouse JSON report data:', json);
         this.processAuditResults(json);
-      } catch (parseError) {
+      } catch (parseError: any) {
+        this.logger.error(`Error parsing JSON report: ${parseError.message}`);
       } finally {
         // fs.unlink(jsonFilePath, (deleteErr) => {
         //   if (deleteErr) {
@@ -131,13 +133,13 @@ export class WebAuditorService {
     });
   }
 
-  static processAuditResults(json: any) {
+  processAuditResults(json: any) {
     const aiReq: AccessibilityIssue[] = []; 
   
-    json?.categories?.accessibility?.auditRefs?.forEach((it) => {
+    json?.categories?.accessibility?.auditRefs?.forEach((it: any) => {
       const status = json?.audits[it.id]?.details?.headings[0]?.label == 'Failing Elements' ? 'Fail' : 'Pass';
       if (status === 'Fail') {
-        json?.audits[it.id]?.details?.items?.forEach((itm) => {
+        json?.audits[it.id]?.details?.items?.forEach((itm: any) => {
             aiReq.push({
             issue_title: json?.audits[it.id]?.title || '',
             issue_description: json?.audits[it.id]?.description || '',
@@ -192,21 +194,21 @@ export class WebAuditorService {
         const recommendation = aiRecommendations[index] || 'No recommendation available';
         this.logger.log(`Recommendation for issue ${audit.issue_title}: ${recommendation}`);
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Error fetching AI recommendations:', error.message || error);
       throw new Error('Failed to fetch AI recommendations.');
     }
   }
 
 
-  static async getLinksFromPage(url, rootUrl) {
+  async getLinksFromPage(url: any, rootUrl: any) {
     try {
         const response = await axios.get(url);
         const html = response.data;
         const $ = cheerio.load(html);
         const links = new Set();
 
-        $('a[href]').each((_, element) => {
+        $('a[href]').each((_: any, element: any) => {
             let href = $(element).attr('href');
             const fullUrl = new URL(href, url).href;
             const linkUrl = new URL(fullUrl);
@@ -226,13 +228,13 @@ export class WebAuditorService {
             }
         });
         return links;
-    } catch (error) {
+    } catch (error: any) {
         console.error(`Error accessing ${url}:`, error.message);
         return new Set();
     }
 }
 
-static async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
+async processUrl(queue: { url: unknown; depth: any; }[], currentUrl: any, depth: number, maxDepth: number, rootUrl: any) {
     if (depth >= maxDepth) return;
 
     console.log(`Processing URL: ${currentUrl} at depth ${depth}`);
@@ -249,7 +251,7 @@ static async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
     });
 }
 
-static async bfsCrawl(queue, startUrl, maxDepth, rootUrl) {
+async bfsCrawl(queue: any, startUrl: unknown, maxDepth: any, rootUrl: string) {
     visited.add(startUrl);
     allUrls.add(startUrl);
 
