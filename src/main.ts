@@ -1,13 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-import OpenAI from 'openai';
-import { exec } from 'child_process';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { exec } from 'child_process';
+import * as fs from 'fs';
+import OpenAI from 'openai';
 import { URL } from 'url';
-import { v4 as uuidv4 } from 'uuid';
-import util from 'util';
 import { promisify } from 'util';
+import { v4 as uuidv4 } from 'uuid';
 
 const visited = new Set();
 const allUrls = new Set();
@@ -27,7 +26,7 @@ export class WebAuditorService {
 
   constructor() {}
 
-  async makeScann(url: string, maxDepth: Number = 1, parentUuid: string = null) {
+  async makeScann(url: string, maxDepth: Number = 1, parentUuid: string | null = null) {
     const queue = [{ url: url, depth: 0 }];
     let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
 
@@ -83,9 +82,6 @@ export class WebAuditorService {
       try {
           await execPromise(command);
   
-          // await this.checkFileExists(jsonFilePath);
-          // await this.checkFileExists(htmlFilePath);
-  
           this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
           
           this.importJsonReport(jsonFilePath);
@@ -93,7 +89,34 @@ export class WebAuditorService {
           this.logger.error(`Error running Lighthouse audit: ${error.message}`);
       }
   }
+
+  async bulidSummaryCallback(url: string, parentId: string, numberCount: string, callBack? :()=>void |undefined) {
   
+    const directoryName = `src/scans`
+    if (!fs.existsSync(directoryName)) {
+      fs.mkdirSync(directoryName, { recursive: true });
+    }
+
+    const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
+
+    const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
+
+    this.logger.log('Running Lighthouse audit in headless mode...');
+    exec(command, async (error, stdout, stderr) => {
+              if (error) {
+                  this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
+                  this.logger.error(`Error running Lighthouse audit: ${error.message}`);
+                  return;
+              }
+              this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
+              if(callBack) {
+                this.logger.log('calling callback')
+                callBack()
+            }
+      })
+  }
+
+
   async checkFileExists(filePath: string) {
       return new Promise((resolve, reject) => {
           const interval = setInterval(() => {
@@ -119,7 +142,7 @@ export class WebAuditorService {
       try {
         const json = JSON.parse(data);
         this.logger.log('Lighthouse JSON report data:', json);
-        this.processAuditResults(json);
+        // this.processAuditResults(json);
       } catch (parseError: any) {
         this.logger.error(`Error parsing JSON report: ${parseError.message}`);
       } finally {
@@ -210,7 +233,7 @@ export class WebAuditorService {
         const links = new Set();
 
         $('a[href]').each((_: any, element: any) => {
-            let href = $(element).attr('href');
+            let href:any = $(element).attr('href');
             const fullUrl = new URL(href, url).href;
             const linkUrl = new URL(fullUrl);
 
