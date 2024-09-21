@@ -22,12 +22,12 @@ interface AccessibilityIssue {
   }
   
 
-export class RequestsService {
-  private logger: Logger = new Logger(RequestsService.name);
+export class WebAuditorService {
+  private logger: Logger = new Logger(WebAuditorService.name);
 
   constructor() {}
-
-  async makeScann(url: string, maxDepth: Number = 1) {
+  
+  static async makeScann(url: string, maxDepth: Number = 1) {
     const queue = [{ url: url, depth: 0 }];
     let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
 
@@ -37,7 +37,7 @@ export class RequestsService {
     return { message: parentId };
   }
 
-  async generateReportsForAllUrls(allUrls: any, parentId: string) {
+  static async generateReportsForAllUrls(allUrls: any, parentId: string) {
     let resolvedUrls = await allUrls
     const concurrencyLimit = 5; 
     const urlsArray = Array.from(resolvedUrls);
@@ -63,18 +63,24 @@ export class RequestsService {
   }
 
   
-  async buildSummary(url: string, parentId: string, numberCount: string) {
+  static async buildSummary(url: string, parentId: string, numberCount: string) {
   
       const directoryName = `src/scans`
       if (!fs.existsSync(directoryName)) {
-        fs.mkdirSync(directoryName, { recursive: true });
+        try {
+          fs.mkdirSync(directoryName, { recursive: true });
+          console.log(`Directory created successfully: ${directoryName}`);
+        } catch (error) {
+          console.error(`Error creating directory: ${error.message}`);
+        }
+      } else {
+        console.log(`Directory already exists: ${directoryName}`);
       }
   
       const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
       const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.report.html`;
   
       const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
-      this.logger.log('Running Lighthouse audit in headless mode...');
   
       try {
           await execPromise(command);
@@ -82,11 +88,9 @@ export class RequestsService {
           // await this.checkFileExists(jsonFilePath);
           // await this.checkFileExists(htmlFilePath);
   
-          this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
           
           this.importJsonReport(jsonFilePath);
       } catch (error) {
-          this.logger.error(`Error running Lighthouse audit: ${error.message}`);
       }
   }
   
@@ -106,18 +110,15 @@ export class RequestsService {
       });
   }
 
-  importJsonReport(jsonFilePath: string) {
+  static importJsonReport(jsonFilePath: string) {
     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
       if (err) {
-        this.logger.error(`Error reading JSON report: ${err.message}`);
         return;
       }
       try {
         const json = JSON.parse(data);
-        this.logger.log('Lighthouse JSON report data:', json);
         this.processAuditResults(json);
       } catch (parseError) {
-        this.logger.error(`Error parsing JSON report: ${parseError.message}`);
       } finally {
         // fs.unlink(jsonFilePath, (deleteErr) => {
         //   if (deleteErr) {
@@ -130,7 +131,7 @@ export class RequestsService {
     });
   }
 
-  processAuditResults(json: any) {
+  static processAuditResults(json: any) {
     const aiReq: AccessibilityIssue[] = []; 
   
     json?.categories?.accessibility?.auditRefs?.forEach((it) => {
@@ -198,7 +199,7 @@ export class RequestsService {
   }
 
 
-  async getLinksFromPage(url, rootUrl) {
+  static async getLinksFromPage(url, rootUrl) {
     try {
         const response = await axios.get(url);
         const html = response.data;
@@ -231,7 +232,7 @@ export class RequestsService {
     }
 }
 
-async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
+static async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
     if (depth >= maxDepth) return;
 
     console.log(`Processing URL: ${currentUrl} at depth ${depth}`);
@@ -248,7 +249,7 @@ async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
     });
 }
 
-async bfsCrawl(queue, startUrl, maxDepth, rootUrl) {
+static async bfsCrawl(queue, startUrl, maxDepth, rootUrl) {
     visited.add(startUrl);
     allUrls.add(startUrl);
 

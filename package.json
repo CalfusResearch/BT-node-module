@@ -1,6 +1,6 @@
 {
   "name": "BT-node-module",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Node module for scanning and checking accessibility.",
   "main": "src/main.ts",
   "author": "BIT BY BIT",

@@ -2,14 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
-import { RequestsService } from './main';
+import { WebAuditorService } from './main';
 const { exec } = require('child_process');
 import { v4 as uuidv4 } from 'uuid';
 
 const delay = promisify(setTimeout);
 
-describe('RequestsService', () => {
-  let service: RequestsService;
+describe('WebAuditorService', () => {
+  let service: WebAuditorService;
 
   const outputDir = 'src/scans';
   const ensureDirectoryExists = (dir: string) => {
@@ -22,10 +22,10 @@ describe('RequestsService', () => {
     process.env.NODE_ENV = 'test';
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RequestsService],
+      providers: [WebAuditorService],
     }).compile();
 
-    service = module.get<RequestsService>(RequestsService);
+    service = module.get<WebAuditorService>(WebAuditorService);
     ensureDirectoryExists(outputDir);
   });
 
@@ -48,7 +48,7 @@ describe('RequestsService', () => {
   it('should generate a Lighthouse report and ensure accessibility score is >= 75', async () => {
     const url = process.env.TEST_URL || 'https://github.com/';
     
-    const parentUuid = await service.makeScann(url);
+    const parentUuid = await WebAuditorService.makeScann(url);
     const filePath = path.join(outputDir, `${parentUuid}-1.report.report.html`);
     
     const isFileCreated = await checkFileCreated(filePath, 600000);
