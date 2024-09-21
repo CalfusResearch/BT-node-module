@@ -86,11 +86,18 @@ export class RequestsService {
   }
 
   async getAiRecommendations(failedAudits: any[]) {
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+        this.logger.warn('OpenAI API Key is missing. Skipping AI recommendations.');
+        return;  
+    }
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: apiKey
     });
     let prompt =
       'I have extracted multiple accessibility issues from a Google Lighthouse report. They are based on Web Content Accessibility Guidelines (WCAG). Please suggest concise, direct solutions for the following issues without numbering or extra formatting:\n\n';
+    
     failedAudits.forEach((audit) => {
       prompt += `Title: ${audit.issue_title}\nDescription: ${audit.issue_description}\nSnippet: ${audit.snippet}\nExplanation: ${audit.explanation}\n\n`;
     });
@@ -121,5 +128,5 @@ export class RequestsService {
       this.logger.error('Error fetching AI recommendations:', error.message || error);
       throw new Error('Failed to fetch AI recommendations.');
     }
-  }
+}
 }

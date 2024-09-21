@@ -2,11 +2,12 @@ pipeline {
     agent any
     
     tools {
-        nodejs 'Node 20.10.0'
+        nodejs '20.10.0'
     }
     
     environment {
         NODE_ENV = 'test'
+        TEST_URL = 'https://calfus.com/'
     }
     
     stages {
