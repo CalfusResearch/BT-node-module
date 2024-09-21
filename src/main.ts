@@ -1,8 +1,17 @@
 import { Logger } from '@nestjs/common';
+import { root } from 'cheerio/dist/commonjs/static';
 import * as fs from 'fs';
 const { exec } = require('child_process');
 import OpenAI from 'openai';
+import { v4 as uuidv4 } from 'uuid';
+const axios = require('axios');
+const cheerio = require('cheerio');
+const { URL } = require('url');
+const visited = new Set();
+const allUrls = new Set();
 
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 
 interface AccessibilityIssue {
@@ -18,25 +27,83 @@ export class RequestsService {
 
   constructor() {}
 
-  async makeScann(url: string) {
-    this.buildSummary(url);
-    return { message: 'Scan initiated.' };
+  async makeScann(url: string, maxDepth: Number = 1) {
+    const queue = [{ url: url, depth: 0 }];
+    let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
+
+    const parentId = uuidv4()
+    this.generateReportsForAllUrls(allUrls, parentId)
+
+    return { message: parentId };
   }
 
-  async buildSummary(url: string) {
-    const jsonFilePath = `./scans/report.report.json`; 
-    const command = `lighthouse ${url} --output=json --output=html --output-path=./scans/report --chrome-flags="--headless" --timeout=60000`;
-
-    this.logger.log('Running Lighthouse audit in headless mode...');
-
-    exec(command, async (error, stdout, stderr) => {
-      if (error) {
-        this.logger.error(`Error running Lighthouse audit: ${stderr}`);
-        return;
+  async generateReportsForAllUrls(allUrls: any, parentId: string) {
+    let resolvedUrls = await allUrls
+    const concurrencyLimit = 5; 
+    const urlsArray = Array.from(resolvedUrls);
+    const queue = []; 
+  
+    const processBatch = async (url: any, index: number) => {
+      await this.buildSummary(url, parentId, String(index + 1));
+    };
+  
+    for (let index = 0; index < urlsArray.length; index++) {
+      const eachUrl = urlsArray[index];
+  
+      const task = processBatch(eachUrl, index);
+      queue.push(task);
+  
+      if (queue.length >= concurrencyLimit) {
+        await Promise.race(queue); 
+        queue.splice(queue.indexOf(await Promise.race(queue)), 1);
       }
-      this.logger.log('Lighthouse audit completed. Report saved.');
-      this.importJsonReport(jsonFilePath);
-    });
+    }
+  
+    await Promise.all(queue);
+  }
+
+  
+  async buildSummary(url: string, parentId: string, numberCount: string) {
+  
+      const directoryName = `src/scans`
+      if (!fs.existsSync(directoryName)) {
+        fs.mkdirSync(directoryName, { recursive: true });
+      }
+  
+      const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
+      const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.report.html`;
+  
+      const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
+      this.logger.log('Running Lighthouse audit in headless mode...');
+  
+      try {
+          await execPromise(command);
+  
+          // await this.checkFileExists(jsonFilePath);
+          // await this.checkFileExists(htmlFilePath);
+  
+          this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
+          
+          this.importJsonReport(jsonFilePath);
+      } catch (error) {
+          this.logger.error(`Error running Lighthouse audit: ${error.message}`);
+      }
+  }
+  
+  async checkFileExists(filePath: string) {
+      return new Promise((resolve, reject) => {
+          const interval = setInterval(() => {
+              if (fs.existsSync(filePath)) {
+                  clearInterval(interval);
+                  resolve(true);
+              }
+          }, 100); 
+  
+          setTimeout(() => {
+              clearInterval(interval);
+              reject(new Error(`Timeout waiting for file: ${filePath}`));
+          }, 60000); 
+      });
   }
 
   importJsonReport(jsonFilePath: string) {
@@ -52,13 +119,13 @@ export class RequestsService {
       } catch (parseError) {
         this.logger.error(`Error parsing JSON report: ${parseError.message}`);
       } finally {
-        fs.unlink(jsonFilePath, (deleteErr) => {
-          if (deleteErr) {
-            this.logger.error(`Error deleting JSON file: ${deleteErr.message}`);
-          } else {
-            this.logger.log(`JSON report file ${jsonFilePath} deleted successfully.`);
-          }
-        });
+        // fs.unlink(jsonFilePath, (deleteErr) => {
+        //   if (deleteErr) {
+        //     this.logger.error(`Error deleting JSON file: ${deleteErr.message}`);
+        //   } else {
+        //     this.logger.log(`JSON report file ${jsonFilePath} deleted successfully.`);
+        //   }
+        // });
       }
     });
   }
@@ -80,9 +147,9 @@ export class RequestsService {
       }
     });
   
-    if (aiReq.length > 0) {
-      this.getAiRecommendations(aiReq);
-    }
+    // if (aiReq.length > 0) {
+    //   this.getAiRecommendations(aiReq);
+    // }
   }
 
   async getAiRecommendations(failedAudits: any[]) {
@@ -128,5 +195,70 @@ export class RequestsService {
       this.logger.error('Error fetching AI recommendations:', error.message || error);
       throw new Error('Failed to fetch AI recommendations.');
     }
+  }
+
+
+  async getLinksFromPage(url, rootUrl) {
+    try {
+        const response = await axios.get(url);
+        const html = response.data;
+        const $ = cheerio.load(html);
+        const links = new Set();
+
+        $('a[href]').each((_, element) => {
+            let href = $(element).attr('href');
+            const fullUrl = new URL(href, url).href;
+            const linkUrl = new URL(fullUrl);
+
+            if (
+              linkUrl.hostname.includes(new URL(rootUrl).hostname) && 
+              !linkUrl.hash &&
+                !fullUrl.endsWith('.pdf') &&
+                !fullUrl.endsWith('.jpg') &&
+                !fullUrl.endsWith('.png') &&
+                !fullUrl.endsWith('.css') &&
+                !fullUrl.endsWith('.js') &&
+                !href.startsWith('#') &&
+                !fullUrl.includes('?')
+            ) {
+                links.add(fullUrl);
+            }
+        });
+        return links;
+    } catch (error) {
+        console.error(`Error accessing ${url}:`, error.message);
+        return new Set();
+    }
 }
+
+async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
+    if (depth >= maxDepth) return;
+
+    console.log(`Processing URL: ${currentUrl} at depth ${depth}`);
+
+    const links = await this.getLinksFromPage(currentUrl, rootUrl);
+
+    links.forEach((link) => {
+        if (!visited.has(link)) {
+            console.log(`  Found new link: ${link} at depth ${depth + 1}`);
+            visited.add(link);
+            queue.push({ url: link, depth: depth + 1 });
+            allUrls.add(link);
+        }
+    });
+}
+
+async bfsCrawl(queue, startUrl, maxDepth, rootUrl) {
+    visited.add(startUrl);
+    allUrls.add(startUrl);
+
+    while (queue.length > 0) {
+        const { url, depth } = queue.shift();
+        await this.processUrl(queue, url, depth, maxDepth,rootUrl);
+    }
+
+    return allUrls
+}
+
+
 }
