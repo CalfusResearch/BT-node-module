@@ -6,7 +6,6 @@ pipeline {
     }
     
     environment {
-        NODE_ENV = 'test'
         TEST_URL = 'https://calfus.com/'
     }
     

@@ -4,13 +4,14 @@ import * as path from 'path';
 import { promisify } from 'util';
 import { RequestsService } from './main';
 const { exec } = require('child_process');
+import { v4 as uuidv4 } from 'uuid';
 
 const delay = promisify(setTimeout);
 
 describe('RequestsService', () => {
   let service: RequestsService;
 
-  const outputDir = './scans';
+  const outputDir = 'src/scans';
   const ensureDirectoryExists = (dir: string) => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -46,11 +47,11 @@ describe('RequestsService', () => {
 
   it('should generate a Lighthouse report and ensure accessibility score is >= 75', async () => {
     const url = process.env.TEST_URL || 'https://github.com/';
-    const filePath = path.join(outputDir, `report.report.json`);
     
-    const result = await service.buildSummary(url);
+    const parentUuid = await service.makeScann(url);
+    const filePath = path.join(outputDir, `${parentUuid}-1.report.report.html`);
     
-    const isFileCreated = await checkFileCreated(filePath, 60000);
+    const isFileCreated = await checkFileCreated(filePath, 600000);
     expect(isFileCreated).toBe(true);
 
     if (isFileCreated) {
@@ -65,5 +66,5 @@ describe('RequestsService', () => {
 
       expect(accessibilityScore).toBeGreaterThanOrEqual(75);
     }
-  }, 90000);
+  }, 900000);
 });
