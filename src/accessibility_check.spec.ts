@@ -45,25 +45,35 @@ describe('WebAuditorService', () => {
     return false;
   };
 
-  it('should generate a Lighthouse report and ensure accessibility score is >= 75', async () => {
+  it('should generate Lighthouse reports and ensure all accessibility scores are >= 75', async () => {
     const url = process.env.TEST_URL || 'https://github.com/';
-    const maxDepth = process.env.MAX_DEPTH || 0
-    const parentUuid = uuidv4()
-    const response = service.makeScann(url, Number(maxDepth), parentUuid );
-    const filePath = path.join(outputDir, `${parentUuid}-1.report.report.json`);
+    const maxDepth = process.env.MAX_DEPTH || 0;
+    const parentUuid = uuidv4();
+    const response = service.makeScann(url, Number(maxDepth), parentUuid, false);
     
-    const isFileCreated = await checkFileCreated(filePath, 60000);
-    expect(isFileCreated).toBe(true);
-
-    if (isFileCreated) {
+    await new Promise(resolve => setTimeout(resolve, 45000));
+  
+    const jsonFiles = fs.readdirSync(outputDir).filter(file => file.endsWith('.json'));
+  
+    expect(jsonFiles.length).toBeGreaterThan(0);
+  
+    let allScoresValid = true;
+  
+    for (const file of jsonFiles) {
+      const filePath = path.join(outputDir, file);
       const jsonReport = fs.readFileSync(filePath, 'utf8');
       const parsedReport = JSON.parse(jsonReport);
-
       const accessibilityScore = parsedReport.categories.accessibility.score * 100;
-
-      console.log('Accessibility Score:', accessibilityScore);
-
-      expect(accessibilityScore).toBeGreaterThanOrEqual(75);
+  
+      console.log(`Accessibility Score for ${file}:`, accessibilityScore);
+  
+      if (accessibilityScore < 75) {
+        allScoresValid = false;
+        break;
+      }
     }
+  
+    expect(allScoresValid).toBe(true);
   }, 90000);
+
 });

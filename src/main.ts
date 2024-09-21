@@ -27,18 +27,18 @@ export class WebAuditorService {
 
   constructor() {}
 
-  async makeScann(url: string, maxDepth: Number = 0, parentUuid: string | null = null) {
+  async makeScann(url: string, maxDepth: Number = 0, parentUuid: string | null = null, processJson: boolean = true) {
     const queue = [{ url: url, depth: 0 }];
     let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
 
     if (parentUuid == null){
         parentUuid = uuidv4()
     }
-    this.generateReportsForAllUrls(allUrls, parentUuid)
+    this.generateReportsForAllUrls(allUrls, parentUuid,processJson)
     return { message: parentUuid };
   }
 
-  async generateReportsForAllUrls(allUrls: any, parentId: string): Promise<{url: any, index: number}[]> {
+  async generateReportsForAllUrls(allUrls: any, parentId: string, processJson: boolean = true): Promise<{url: any, index: number}[]> {
     let resolvedUrls = await allUrls;
     const concurrencyLimit = 5;
     const urlsArray = Array.from(resolvedUrls);
@@ -46,7 +46,7 @@ export class WebAuditorService {
     const results: {url: any, index: number}[] = [];  
   
     const processBatch = async (url: any, index: any) => {
-      await this.bulidSummaryCallback(url, parentId, String(index + 1));
+      await this.bulidSummaryCallback(url, parentId, String(index + 1), undefined, processJson);
       results.push({ url, index });  
     };
   
@@ -67,42 +67,44 @@ export class WebAuditorService {
     return results; 
   }
   
-  async buildSummary(url: string, parentId: string, numberCount: string) {
+  // async buildSummary(url: string, parentId: string, numberCount: string) {
   
-      const directoryName = `src/scans`
-      if (!fs.existsSync(directoryName)) {
-        fs.mkdirSync(directoryName, { recursive: true });
-      }
+  //     const directoryName = `src/scans`
+  //     if (!fs.existsSync(directoryName)) {
+  //       fs.mkdirSync(directoryName, { recursive: true });
+  //     }
   
-      const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
-      const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
+  //     const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
+  //     const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
+  //     const command = `lighthouse ${url} --output=json --output-path=${jsonFilePath} --output=html --output-path=${htmlFilePath} --chrome-flags="--headless" --timeout=60000`;
+  //     this.logger.log('Running Lighthouse audit in headless mode...');
   
-      const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath} --chrome-flags="--headless" --timeout=60000`;
-      this.logger.log('Running Lighthouse audit in headless mode...');
+  //     try {
+  //         await execPromise(command);
   
-      try {
-          await execPromise(command);
-  
-          this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
+  //         this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
           
-          this.importJsonReport(jsonFilePath,htmlFilePath );
-      } catch (error: any) {
-          this.logger.error(`Error running Lighthouse audit: ${error.message}`);
-      }
-  }
+  //         this.importJsonReport(jsonFilePath,htmlFilePath );
+  //     } catch (error: any) {
+  //         this.logger.error(`Error running Lighthouse audit: ${error.message}`);
+  //     }
+  // }
 
-  async bulidSummaryCallback(url: string, parentId: string, numberCount: string, callBack? :()=>void |undefined) {
+  async bulidSummaryCallback(url: string, parentId: string, numberCount: string,  callBack? :()=>void |undefined, processJson: boolean = true) {
   
     const directoryName = `src/scans`
     if (!fs.existsSync(directoryName)) {
       fs.mkdirSync(directoryName, { recursive: true });
     }
 
-    const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.json`; 
-    const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
+    console.log('====buidlJSON====')
+    console.log(processJson)
+    console.log('====buidlJSON====')
 
-    const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath} --output-path=${htmlFilePath} --chrome-flags="--headless" --timeout=60000`;
+    let jsonFilePath = `${directoryName}/${parentId}-${numberCount}.json`; 
+    let htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
 
+    const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath.replace('.json', '')} --chrome-flags="--headless" --timeout=60000`;
     this.logger.log('Running Lighthouse audit in headless mode...');
     exec(command, async (error, stdout, stderr) => {
         if (error) {
@@ -111,7 +113,13 @@ export class WebAuditorService {
             return;
         }
         this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
-        this.importJsonReport(jsonFilePath, htmlFilePath, callBack) 
+
+        jsonFilePath = jsonFilePath.replace('.json','.report.json')
+        htmlFilePath = htmlFilePath.replace('.html','.report.html')
+        
+        if(processJson){
+          this.importJsonReport(jsonFilePath, htmlFilePath, callBack) 
+        }
       })
   }
 
