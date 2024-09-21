@@ -27,7 +27,7 @@ export class WebAuditorService {
 
   constructor() {}
 
-  async makeScann(url: string, maxDepth: Number = 1, parentUuid: string | null = null) {
+  async makeScann(url: string, maxDepth: Number = 0, parentUuid: string | null = null) {
     const queue = [{ url: url, depth: 0 }];
     let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
 
@@ -46,7 +46,7 @@ export class WebAuditorService {
     const results: {url: any, index: number}[] = [];  
   
     const processBatch = async (url: any, index: any) => {
-      await this.buildSummary(url, parentId, String(index + 1));
+      await this.bulidSummaryCallback(url, parentId, String(index + 1));
       results.push({ url, index });  
     };
   
@@ -75,6 +75,7 @@ export class WebAuditorService {
       }
   
       const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.report.json`; 
+      const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
   
       const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath} --chrome-flags="--headless" --timeout=60000`;
       this.logger.log('Running Lighthouse audit in headless mode...');
@@ -84,7 +85,7 @@ export class WebAuditorService {
   
           this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
           
-          this.importJsonReport(jsonFilePath);
+          this.importJsonReport(jsonFilePath,htmlFilePath );
       } catch (error: any) {
           this.logger.error(`Error running Lighthouse audit: ${error.message}`);
       }
@@ -98,8 +99,9 @@ export class WebAuditorService {
     }
 
     const jsonFilePath = `${directoryName}/${parentId}-${numberCount}.json`; 
+    const htmlFilePath = `${directoryName}/${parentId}-${numberCount}.html`; 
 
-    const command = `lighthouse ${url} --output=json --output-path=${jsonFilePath} --chrome-flags="--headless" --timeout=60000`;
+    const command = `lighthouse ${url} --output=json --output=html --output-path=${jsonFilePath} --output-path=${htmlFilePath} --chrome-flags="--headless" --timeout=60000`;
 
     this.logger.log('Running Lighthouse audit in headless mode...');
     exec(command, async (error, stdout, stderr) => {
@@ -109,7 +111,7 @@ export class WebAuditorService {
             return;
         }
         this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
-        this.importJsonReport(jsonFilePath, callBack) 
+        this.importJsonReport(jsonFilePath, htmlFilePath, callBack) 
       })
   }
 
@@ -130,7 +132,7 @@ export class WebAuditorService {
       });
   }
 
-  importJsonReport(jsonFilePath: string, callBack? :()=>void |undefined) {
+  importJsonReport(jsonFilePath: string,htmlFilePath: string, callBack? :()=>void |undefined ) {
     fs.readFile(jsonFilePath, 'utf8', (err, data) => {
       if (err) {
           this.logger.error('Error reading the file:', err);
@@ -138,7 +140,7 @@ export class WebAuditorService {
       }
     
       this.logger.log('Updating Results .. ')
-      const processedData: any = JSON.stringify(this.formatJson(JSON.parse(data)));
+      const processedData: any = JSON.stringify(this.formatJson(JSON.parse(data), htmlFilePath ));
   
       fs.writeFile(jsonFilePath, processedData, (err) => {
           if (err) {
@@ -155,7 +157,7 @@ export class WebAuditorService {
   }
 
 
-  formatJson(json:any) {
+  formatJson(json:any, htmlFilePath) {
     const groups = new Map<string, Groups>()
     json?.categories?.accessibility.auditRefs?.forEach(it => {
         const grp : Groups = {
@@ -194,8 +196,91 @@ export class WebAuditorService {
     });
     const accessabilty: Groups[] = []
     groups.forEach(it=> accessabilty.push(it))
+
+  //   const htmlData = this.convertJSONToHTML(accessabilty)
+
+  //   fs.writeFile(htmlFilePath, htmlData, (err) => {
+  //     if (err) {
+  //         console.error('Error writing file:', err);
+  //     } else {
+  //         console.log('File saved successfully!');
+  //     }
+  // });
+  
     return accessabilty
   }
+
+  convertJSONToHTML(data) {
+    if (!Array.isArray(data) || data.length === 0) {
+        return "<p>No data available</p>";
+    }
+
+    const headers = Object.keys(this.flattenObject(data[0]));  // Get table headers
+    let html = `
+        <html>
+        <head>
+            <style>
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 20px 0;
+                }
+                th, td {
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    text-align: left;
+                }
+                th {
+                    background-color: #f2f2f2;
+                    font-weight: bold;
+                }
+                tr:hover {
+                    background-color: #f5f5f5;
+                }
+            </style>
+        </head>
+        <body>
+            <table>
+                <thead>
+                    <tr>
+                        ${headers.map(header => `<th>${header.replace(/\./g, ' ')}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    data.forEach(row => {
+        const flatRow = this.flattenObject(row);  // Flatten the current row
+        html += "<tr>";
+        headers.forEach(header => {
+            html += `<td>${flatRow[header] !== undefined ? flatRow[header] : ''}</td>`;
+        });
+        html += "</tr>";
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </body>
+        </html>
+    `;
+    return html;
+}
+
+flattenObject(obj) {
+    const result = {};
+    for (const key in obj) {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+            const flatObj = this.flattenObject(obj[key]);
+            for (const flatKey in flatObj) {
+                result[`${key}.${flatKey}`] = flatObj[flatKey]; // Prefix with parent key
+            }
+        } else {
+            result[key] = obj[key];
+        }
+    }
+    return result;
+}
 
 
   processAuditResults(json: any) {
