@@ -1,17 +1,17 @@
-import { Logger } from '@nestjs/common';
-import { root } from 'cheerio/dist/commonjs/static';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
-const { exec } = require('child_process');
 import OpenAI from 'openai';
+import { exec } from 'child_process';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import { URL } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-const axios = require('axios');
-const cheerio = require('cheerio');
-const { URL } = require('url');
+import util from 'util';
+import { promisify } from 'util';
+
 const visited = new Set();
 const allUrls = new Set();
-
-const util = require('util');
-const execPromise = util.promisify(exec);
+const execPromise = promisify(exec);
 
 
 interface AccessibilityIssue {
@@ -21,9 +21,9 @@ interface AccessibilityIssue {
     explanation: string;
   }
   
-
-export class RequestsService {
-  private logger: Logger = new Logger(RequestsService.name);
+@Injectable()   
+export class WebAuditorService {
+  private logger: Logger = new Logger(WebAuditorService.name);
 
   constructor() {}
 
@@ -37,14 +37,16 @@ export class RequestsService {
     return { message: parentId };
   }
 
-  async generateReportsForAllUrls(allUrls: any, parentId: string) {
-    let resolvedUrls = await allUrls
-    const concurrencyLimit = 5; 
+  async generateReportsForAllUrls(allUrls: any, parentId: string): Promise<{url: any, index: number}[]> {
+    let resolvedUrls = await allUrls;
+    const concurrencyLimit = 5;
     const urlsArray = Array.from(resolvedUrls);
-    const queue = []; 
+    const queue: Promise<void>[] = [];
+    const results: {url: any, index: number}[] = [];  
   
-    const processBatch = async (url: any, index: number) => {
+    const processBatch = async (url: any, index: any) => {
       await this.buildSummary(url, parentId, String(index + 1));
+      results.push({ url, index });  
     };
   
     for (let index = 0; index < urlsArray.length; index++) {
@@ -53,15 +55,16 @@ export class RequestsService {
       const task = processBatch(eachUrl, index);
       queue.push(task);
   
-      if (queue.length >= concurrencyLimit) {
-        await Promise.race(queue); 
-        queue.splice(queue.indexOf(await Promise.race(queue)), 1);
+      if (queue.length >= concurrencyLimit) { 
+        await Promise.race(queue);
+        queue.splice(queue.findIndex(async p => await p === await Promise.race(queue)), 1);
       }
     }
-  
+    
     await Promise.all(queue);
+  
+    return results; 
   }
-
   
   async buildSummary(url: string, parentId: string, numberCount: string) {
   
@@ -85,7 +88,7 @@ export class RequestsService {
           this.logger.log(`Lighthouse audit completed. Report saved. for id: ${numberCount}`);
           
           this.importJsonReport(jsonFilePath);
-      } catch (error) {
+      } catch (error: any) {
           this.logger.error(`Error running Lighthouse audit: ${error.message}`);
       }
   }
@@ -116,7 +119,7 @@ export class RequestsService {
         const json = JSON.parse(data);
         this.logger.log('Lighthouse JSON report data:', json);
         this.processAuditResults(json);
-      } catch (parseError) {
+      } catch (parseError: any) {
         this.logger.error(`Error parsing JSON report: ${parseError.message}`);
       } finally {
         // fs.unlink(jsonFilePath, (deleteErr) => {
@@ -133,10 +136,10 @@ export class RequestsService {
   processAuditResults(json: any) {
     const aiReq: AccessibilityIssue[] = []; 
   
-    json?.categories?.accessibility?.auditRefs?.forEach((it) => {
+    json?.categories?.accessibility?.auditRefs?.forEach((it: any) => {
       const status = json?.audits[it.id]?.details?.headings[0]?.label == 'Failing Elements' ? 'Fail' : 'Pass';
       if (status === 'Fail') {
-        json?.audits[it.id]?.details?.items?.forEach((itm) => {
+        json?.audits[it.id]?.details?.items?.forEach((itm: any) => {
             aiReq.push({
             issue_title: json?.audits[it.id]?.title || '',
             issue_description: json?.audits[it.id]?.description || '',
@@ -191,21 +194,21 @@ export class RequestsService {
         const recommendation = aiRecommendations[index] || 'No recommendation available';
         this.logger.log(`Recommendation for issue ${audit.issue_title}: ${recommendation}`);
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Error fetching AI recommendations:', error.message || error);
       throw new Error('Failed to fetch AI recommendations.');
     }
   }
 
 
-  async getLinksFromPage(url, rootUrl) {
+  async getLinksFromPage(url: any, rootUrl: any) {
     try {
         const response = await axios.get(url);
         const html = response.data;
         const $ = cheerio.load(html);
         const links = new Set();
 
-        $('a[href]').each((_, element) => {
+        $('a[href]').each((_: any, element: any) => {
             let href = $(element).attr('href');
             const fullUrl = new URL(href, url).href;
             const linkUrl = new URL(fullUrl);
@@ -225,13 +228,13 @@ export class RequestsService {
             }
         });
         return links;
-    } catch (error) {
+    } catch (error: any) {
         console.error(`Error accessing ${url}:`, error.message);
         return new Set();
     }
 }
 
-async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
+async processUrl(queue: { url: unknown; depth: any; }[], currentUrl: any, depth: number, maxDepth: number, rootUrl: any) {
     if (depth >= maxDepth) return;
 
     console.log(`Processing URL: ${currentUrl} at depth ${depth}`);
@@ -248,7 +251,7 @@ async processUrl(queue, currentUrl, depth, maxDepth, rootUrl) {
     });
 }
 
-async bfsCrawl(queue, startUrl, maxDepth, rootUrl) {
+async bfsCrawl(queue: any, startUrl: unknown, maxDepth: any, rootUrl: string) {
     visited.add(startUrl);
     allUrls.add(startUrl);
 

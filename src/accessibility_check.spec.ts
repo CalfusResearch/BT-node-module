@@ -2,16 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
-import { RequestsService } from './main';
+import { WebAuditorService } from './main';
 const { exec } = require('child_process');
 import { v4 as uuidv4 } from 'uuid';
 
 const delay = promisify(setTimeout);
 
-describe('RequestsService', () => {
-  let service: RequestsService;
+describe('WebAuditorService', () => {
+  let service: WebAuditorService;
 
-  const outputDir = 'src/scans';
+  const outputDir = 'src/main/';
   const ensureDirectoryExists = (dir: string) => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -22,10 +22,10 @@ describe('RequestsService', () => {
     process.env.NODE_ENV = 'test';
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RequestsService],
+      providers: [WebAuditorService],
     }).compile();
 
-    service = module.get<RequestsService>(RequestsService);
+    service = module.get<WebAuditorService>(WebAuditorService);
     ensureDirectoryExists(outputDir);
   });
 

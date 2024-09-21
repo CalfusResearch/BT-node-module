@@ -1,7 +1,7 @@
-import { RequestsService } from "./main";
+import { WebAuditorService } from "./main";
 
 async function main() {
-  const requestsService = new RequestsService();
+  const requestsService = new WebAuditorService();
 
   try {
     const result = await requestsService.makeScann('https://calfus.com');
