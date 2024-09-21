@@ -11,7 +11,7 @@ const delay = promisify(setTimeout);
 describe('WebAuditorService', () => {
   let service: WebAuditorService;
 
-  const outputDir = 'src/main/';
+  const outputDir = 'src/scans/';
   const ensureDirectoryExists = (dir: string) => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -47,11 +47,12 @@ describe('WebAuditorService', () => {
 
   it('should generate a Lighthouse report and ensure accessibility score is >= 75', async () => {
     const url = process.env.TEST_URL || 'https://github.com/';
+    const maxDepth = process.env.MAX_DEPTH || 0
+    const parentUuid = uuidv4()
+    const response = service.makeScann(url, Number(maxDepth), parentUuid );
+    const filePath = path.join(outputDir, `${parentUuid}-1.report.report.json`);
     
-    const parentUuid = await service.makeScann(url);
-    const filePath = path.join(outputDir, `${parentUuid}-1.report.report.html`);
-    
-    const isFileCreated = await checkFileCreated(filePath, 600000);
+    const isFileCreated = await checkFileCreated(filePath, 60000);
     expect(isFileCreated).toBe(true);
 
     if (isFileCreated) {
@@ -60,11 +61,9 @@ describe('WebAuditorService', () => {
 
       const accessibilityScore = parsedReport.categories.accessibility.score * 100;
 
-      console.log('===============================');
       console.log('Accessibility Score:', accessibilityScore);
-      console.log('===============================');
 
       expect(accessibilityScore).toBeGreaterThanOrEqual(75);
     }
-  }, 900000);
+  }, 90000);
 });

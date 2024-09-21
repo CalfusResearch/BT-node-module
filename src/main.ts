@@ -27,14 +27,15 @@ export class WebAuditorService {
 
   constructor() {}
 
-  async makeScann(url: string, maxDepth: Number = 1) {
+  async makeScann(url: string, maxDepth: Number = 1, parentUuid: string = null) {
     const queue = [{ url: url, depth: 0 }];
     let allUrls = this.bfsCrawl(queue, url, maxDepth, url)
 
-    const parentId = uuidv4()
-    this.generateReportsForAllUrls(allUrls, parentId)
-
-    return { message: parentId };
+    if (parentUuid == null){
+        parentUuid = uuidv4()
+    }
+    this.generateReportsForAllUrls(allUrls, parentUuid)
+    return { message: parentUuid };
   }
 
   async generateReportsForAllUrls(allUrls: any, parentId: string): Promise<{url: any, index: number}[]> {
