@@ -117,13 +117,8 @@ export class WebAuditorService {
         const parsedReport = JSON.parse(fileContent);
         accessibilityScore = parsedReport.categories.accessibility.score * 100;  
         
-        console.log('====came here===========')
 
         if(processJson){
-          console.log('-------------------------')
-          console.log(accessibilityScore)
-          console.log('-------------------------')
-
           this.importJsonReport(jsonFilePath, htmlFilePath, callBack) 
         }
       })

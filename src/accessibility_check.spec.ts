@@ -48,7 +48,7 @@ describe('WebAuditorService', () => {
   it('should generate Lighthouse reports and ensure all accessibility scores are >= 75', async () => {
     const url = process.env.TEST_URL || 'https://calfus.com/';
     const maxDepth = process.env.MAX_DEPTH || 0;
-    const checkForAccessibility = Number(process.env.ACCESSIBILITY) || 0;
+    const checkForAccessibility = Number(process.env.ACCESSIBILITY_CHECK_LIMIT) || 0;
     const parentUuid = uuidv4();
     const response = service.makeScann(url, Number(maxDepth), parentUuid, false);
     

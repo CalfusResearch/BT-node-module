@@ -7,6 +7,7 @@ pipeline {
     
     environment {
         TEST_URL = 'https://calfus.com/'
+        ACCESSIBILITY_CHECK_LIMIT = '98'
     }
     
     stages {
