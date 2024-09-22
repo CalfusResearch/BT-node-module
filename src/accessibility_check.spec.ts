@@ -51,14 +51,18 @@ describe('WebAuditorService', () => {
     const checkForAccessibility = Number(process.env.ACCESSIBILITY_CHECK_LIMIT) || 0;
     const parentUuid = uuidv4();
     const response = service.makeScann(url, Number(maxDepth), parentUuid, false);
-    
+  
     await new Promise(resolve => setTimeout(resolve, 45000));
   
     const jsonFiles = fs.readdirSync(outputDir).filter(file => file.endsWith('.json'));
   
-    expect(jsonFiles.length).toBeGreaterThan(0);
+    if (jsonFiles.length === 0) {
+      throw new Error(`No Lighthouse reports found in ${outputDir}. Ensure the scan completed successfully.`);
+    }
   
     let allScoresValid = true;
+    let failedFile = '';
+    let failedScore = 0;
   
     for (const file of jsonFiles) {
       const filePath = path.join(outputDir, file);
@@ -70,11 +74,18 @@ describe('WebAuditorService', () => {
   
       if (accessibilityScore < checkForAccessibility) {
         allScoresValid = false;
+        failedFile = file;
+        failedScore = accessibilityScore;
         break;
       }
     }
   
+    if (!allScoresValid) {
+      throw new Error(`Accessibility score for ${failedFile} is ${failedScore}, which is below the threshold of ${checkForAccessibility}.`);
+    }
+  
     expect(allScoresValid).toBe(true);
   }, 90000);
-
+  
+  
 });
