@@ -45,13 +45,14 @@ describe('WebAuditorService', () => {
     return false;
   };
 
-  it('should generate Lighthouse reports and ensure all accessibility scores are >= 75', async () => {
+  it('should generate Lighthouse reports and ensure all accessibility scores are greater than the set threshold', async () => {
     const url = process.env.TEST_URL || 'https://calfus.com/';
     const maxDepth = Number(process.env.MAX_DEPTH) || 0;
     const checkForAccessibility = Number(process.env.ACCESSIBILITY_CHECK_LIMIT) || 0;
     const parentUuid = uuidv4();
     const response = await service.makeScann(url, Number(maxDepth), parentUuid, false);
-  
+    
+    console.log('==========', parentUuid)
     await new Promise(resolve => setTimeout(resolve, 45000));
   
     const jsonFiles = fs.readdirSync(outputDir).filter(file => file.startsWith(`${parentUuid}_`) && file.endsWith('.json'));
