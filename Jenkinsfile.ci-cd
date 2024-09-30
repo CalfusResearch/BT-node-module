@@ -9,6 +9,8 @@ pipeline {
         TEST_URL = 'https://calfus.com/'
         ACCESSIBILITY_CHECK_LIMIT = '98'
         MAX_DEPTH = '0'
+        TEST_TIMEOUT = '90000'
+        WAIT_TIMEOUT = '45000'
     }
     
     stages {
