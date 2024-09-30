@@ -55,7 +55,7 @@ describe('WebAuditorService', () => {
     console.log('==========', parentUuid)
     await new Promise(resolve => setTimeout(resolve, 45000));
   
-    const jsonFiles = fs.readdirSync(outputDir).filter(file => file.startsWith(`${parentUuid}_`) && file.endsWith('.json'));
+    const jsonFiles = fs.readdirSync(outputDir).filter(file => file.startsWith(`${parentUuid}`) && file.endsWith('.json'));
   
     if (jsonFiles.length === 0) {
       throw new Error(`No Lighthouse reports found in ${outputDir} for parent UUID ${parentUuid}. Ensure the scan completed successfully.`);
