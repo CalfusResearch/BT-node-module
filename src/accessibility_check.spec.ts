@@ -50,14 +50,14 @@ describe('WebAuditorService', () => {
     const maxDepth = Number(process.env.MAX_DEPTH) || 0;
     const checkForAccessibility = Number(process.env.ACCESSIBILITY_CHECK_LIMIT) || 0;
     const parentUuid = uuidv4();
-    const response = service.makeScann(url, Number(maxDepth), parentUuid, false);
+    const response = await service.makeScann(url, Number(maxDepth), parentUuid, false);
   
     await new Promise(resolve => setTimeout(resolve, 45000));
   
-    const jsonFiles = fs.readdirSync(outputDir).filter(file => file.endsWith('.json'));
+    const jsonFiles = fs.readdirSync(outputDir).filter(file => file.startsWith(`${parentUuid}_`) && file.endsWith('.json'));
   
     if (jsonFiles.length === 0) {
-      throw new Error(`No Lighthouse reports found in ${outputDir}. Ensure the scan completed successfully.`);
+      throw new Error(`No Lighthouse reports found in ${outputDir} for parent UUID ${parentUuid}. Ensure the scan completed successfully.`);
     }
   
     let allScoresValid = true;
